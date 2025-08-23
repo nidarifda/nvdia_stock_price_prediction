@@ -1,12 +1,9 @@
-# render.yaml
 services:
   - type: web
     name: nvda-api
     env: python
     plan: free
-    buildCommand: |
-      pip install --upgrade pip wheel setuptools
-      pip install -r requirements.txt
+    buildCommand: pip install --upgrade pip wheel setuptools && pip install -r requirements-api.txt
     startCommand: uvicorn src.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
@@ -19,4 +16,3 @@ services:
         value: lgbm
       - key: THRESHOLD_UP
         value: "0.5"
-      
