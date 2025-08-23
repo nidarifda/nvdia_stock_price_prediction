@@ -1,0 +1,54 @@
+# .github/workflows/deploy.yml
+name: Deploy Vite app to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]   # change if your default branch differs
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: nvda-frontend/package-lock.json
+
+      - name: Build
+        working-directory: nvda-frontend
+        env:
+          VITE_API_BASE: ${{ secrets.VITE_API_BASE }}         # <-- set this secret
+          VITE_BASE: "/${{ github.event.repository.name }}/"  # base path for Pages
+        run: |
+          npm ci
+          echo "VITE_API_BASE=${VITE_API_BASE}" > .env.production
+          npm run build -- --base="$VITE_BASE"
+          cp dist/index.html dist/404.html
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: nvda-frontend/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
