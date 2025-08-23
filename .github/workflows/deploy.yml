@@ -11,30 +11,32 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: "pages"
   cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: nvda-frontend
     steps:
       - uses: actions/checkout@v4
+
+      # (Recommended by GitHub) prepares the Pages environment
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          # no cache; no lockfile
 
       - name: Install deps
+        working-directory: nvda-frontend
         run: npm install
 
       - name: Build
+        working-directory: nvda-frontend
         env:
-          VITE_API_BASE: ${{ secrets.VITE_API_BASE }}   # add this secret in Settings → Secrets and variables → Actions
+          VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
         run: |
           echo "VITE_API_BASE=${VITE_API_BASE}" > .env.production
           npm run build -- --base="/${{ github.event.repository.name }}/"
