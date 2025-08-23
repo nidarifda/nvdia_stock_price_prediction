@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { predictRegression, predictClassification } from "./api";
+import { predictRegression } from "./api";
 
 const defaultMatrix = `0.12,0.03,0.45,0.20
 0.10,0.04,0.44,0.18
@@ -39,7 +39,6 @@ export default function App() {
   const [raw, setRaw] = useState(defaultMatrix);
   const [loading, setLoading] = useState(false);
   const [regResult, setRegResult] = useState(null);
-  const [clsResult, setClsResult] = useState(null);
   const [error, setError] = useState("");
 
   const helper = useMemo(() => {
@@ -52,18 +51,14 @@ export default function App() {
     setError("");
     setLoading(true);
     setRegResult(null);
-    setClsResult(null);
     try {
       const X = parseInput(
         raw,
         mode === "auto" ? (framework === "lgbm" ? "last" : "seq") : mode
       );
-      const [reg, cls] = await Promise.all([
-        predictRegression({ tag, framework, X }),
-        predictClassification({ tag, framework, X }),
-      ]);
+      // -- Only call REGRESSION now --
+      const reg = await predictRegression({ tag, framework, X });
       setRegResult(reg);
-      setClsResult(cls);
     } catch (e) {
       setError(e.message || String(e));
     } finally {
@@ -124,7 +119,7 @@ export default function App() {
           border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700
         }}
       >
-        {loading ? "Predicting…" : "Predict (Reg + Cls)"}
+        {loading ? "Predicting…" : "Predict (Regression)"}
       </button>
 
       {error && (
@@ -133,7 +128,8 @@ export default function App() {
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 12 }}>
+      {/* Only the Regression card is shown */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16, marginTop: 12 }}>
         <div style={{ padding: 16, border: "1px solid #eee", borderRadius: 10 }}>
           <h3>Regression</h3>
           {regResult ? (
@@ -142,20 +138,6 @@ export default function App() {
               <li><b>Tag:</b> {regResult.tag}</li>
               <li><b>Prediction:</b> {regResult.y_pred}</li>
               {regResult.scaled && <li><b>Note:</b> {regResult.note}</li>}
-            </ul>
-          ) : (
-            <p>No result yet.</p>
-          )}
-        </div>
-        <div style={{ padding: 16, border: "1px solid #eee", borderRadius: 10 }}>
-          <h3>Classification</h3>
-          {clsResult ? (
-            <ul>
-              <li><b>Framework:</b> {clsResult.framework}</li>
-              <li><b>Tag:</b> {clsResult.tag}</li>
-              <li><b>p(up):</b> {Number(clsResult.p_up).toFixed(4)}</li>
-              <li><b>Label:</b> {clsResult.label ? "UP (1)" : "NOT UP (0)"}</li>
-              <li><b>Threshold:</b> {clsResult.threshold}</li>
             </ul>
           ) : (
             <p>No result yet.</p>
