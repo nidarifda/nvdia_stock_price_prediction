@@ -2,16 +2,13 @@
 import os
 from pathlib import Path
 from typing import Dict
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
-from .schemas import (
-    HealthResponse,
-    RegressionRequest, RegressionResponse,
-    ClassificationRequest, ClassificationResponse
-)
+from .schemas import HealthResponse, RegressionRequest, RegressionResponse, ClassificationRequest, ClassificationResponse
 from .loaders import load_all_models
 from .infer import to_np, last_step, inverse_y_if_possible, prepare_seq_for_keras
 
@@ -21,7 +18,6 @@ THRESH = float(os.getenv("THRESHOLD_UP", "0.5"))
 DEFAULT_TAG = os.getenv("DEFAULT_TAG", "B")
 DEFAULT_FRAMEWORK = os.getenv("DEFAULT_FRAMEWORK", "lgbm")
 
-# globals filled at startup
 MODELS: Dict = {}
 Y_SCALER = None
 
@@ -30,29 +26,26 @@ async def lifespan(app: FastAPI):
     global MODELS, Y_SCALER
     try:
         MODELS = load_all_models(MODEL_DIR)
-        Y_SCALER = MODELS.get("y_scaler", None)
-        print(f"[startup] Loaded models from {MODEL_DIR.resolve()}")
+        Y_SCALER = MODELS.get("y_scaler")
+        print("✅ Models loaded.")
     except Exception as e:
-        # Don’t crash the server — endpoints will 404 if a model is missing
-        print(f"[startup] WARNING: failed to load models: {e!r}")
+        import traceback; traceback.print_exc()
         MODELS = {}
         Y_SCALER = None
+        # keep app running; health will show not-ready
     yield
-    # (optional) clean up
 
 app = FastAPI(title="NVDA Forecast API", version="1.0.0", lifespan=lifespan)
 
-# CORS — tighten allow_origins in prod
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "https://<your-username>.github.io",
-        "https://<your-username>.github.io/<repo-name>",
-        "*",  # dev only
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["http://localhost:5173","http://127.0.0.1:5173","*"],
+    allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
 )
+
+@app.get("/health", response_model=HealthResponse)
+def health():
+    # You can enhance HealthResponse to include a simple “ready” flag/message
+    if not MODELS:
+        return HealthResponse(message="loaded: false")
+    return HealthResponse(message="ok")
