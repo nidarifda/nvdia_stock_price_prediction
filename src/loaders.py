@@ -1,77 +1,101 @@
+# src/loaders.py
+from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Any
 import pickle
-import tensorflow as tf
-from tensorflow.keras.layers import Dense
+import joblib
 
-# --- Custom layer used by your BiLSTM+Attention models ---
-class SoftAttention(tf.keras.layers.Layer):
-    """Additive soft attention over time: input (B,T,F) -> context (B,F)."""
-    def __init__(self, units=64, **kwargs):
-        super().__init__(**kwargs)
-        self.proj = Dense(units, activation="tanh")
-        self.score = Dense(1, activation=None)
+TAGS = ("A", "B", "AFF")
 
-    def call(self, h, mask=None, training=None):
-        e = self.score(self.proj(h))  # (B,T,1)
-        if mask is not None:
-            m = tf.cast(mask[:, :, tf.newaxis], tf.float32)
-            e = e + (1.0 - m) * (-1e9)
-        a = tf.nn.softmax(e, axis=1)  # (B,T,1)
-        return tf.reduce_sum(a * h, axis=1)  # (B,F)
 
-def _load_pickle(p: Path):
-    with open(p, "rb") as f:
-        return pickle.load(f)
+def _load_pickle(path: Path):
+    """Load a pickled model with joblib (fallback to pickle)."""
+    try:
+        return joblib.load(path)
+    except Exception:
+        with open(path, "rb") as f:
+            return pickle.load(f)
 
-def load_all_models(model_dir: Path) -> Dict[str, Any]:
+
+def _maybe_import_tf():
+    """Import TensorFlow only if present; return None otherwise."""
+    try:
+        import tensorflow as tf  # type: ignore
+        return tf
+    except Exception:
+        return None
+
+
+def _load_keras(path: Path):
+    """Load a .keras model; raise a friendly error if TF isn't installed."""
+    tf = _maybe_import_tf()
+    if tf is None:
+        raise RuntimeError(
+            f"TensorFlow is required to load {path.name} but is not installed. "
+            "Either add tensorflow==2.15.0 to requirements or remove the .keras model."
+        )
+    from tensorflow.keras.models import load_model  # type: ignore
+    return load_model(path)
+
+
+def load_all_models(model_dir: str | Path) -> Dict[str, Dict[str, Dict[str, Any]]]:
     """
-    Loads available artifacts from model_dir.
-
-    Expected (optional) files:
-      - LightGBM: nvda_{TAG}_reg_lgb.pkl, nvda_{TAG}_cls_lgb.pkl
-      - LSTM: nvda_LSTM_{TAG}_{reg|cls}.keras
-      - BiLSTM+Attn: nvda_BiLSTM_Attn_{TAG}_{reg|cls}.keras
-      - y_scaler.pkl  (shared scaler for inverse-transform)
+    Returns:
+      {
+        "lgbm":   { "A": {"reg": ..., "cls": ...}, "B": {...}, "AFF": {...} },
+        "lstm":   { ... }      # only if .keras files exist
+        "bilstm": { ... }      # only if .keras files exist
+        "y_scaler": <optional>
+      }
     """
-    store: Dict[str, Any] = {
-        "lgbm": {"A": {}, "B": {}, "AFF": {}},
-        "lstm": {"A": {}, "B": {}, "AFF": {}},
-        "bilstm": {"A": {}, "B": {}, "AFF": {}},
-        "y_scaler": None,
-    }
+    model_dir = Path(model_dir)
+    out: Dict[str, Dict[str, Dict[str, Any]]] = {"lgbm": {}, "lstm": {}, "bilstm": {}}
 
-    # y_scaler (optional)
-    y_scaler_pkl = model_dir / "y_scaler.pkl"
-    if y_scaler_pkl.exists():
-        store["y_scaler"] = _load_pickle(y_scaler_pkl)
-
-    # LightGBM (sklearn wrappers)
-    for tag in ["A", "B", "AFF"]:
+    # ---- LightGBM pickles (.pkl) ----
+    for tag in TAGS:
         reg_pkl = model_dir / f"nvda_{tag}_reg_lgb.pkl"
         cls_pkl = model_dir / f"nvda_{tag}_cls_lgb.pkl"
+        bucket: Dict[str, Any] = {}
         if reg_pkl.exists():
-            store["lgbm"][tag]["reg"] = _load_pickle(reg_pkl)
+            bucket["reg"] = _load_pickle(reg_pkl)
         if cls_pkl.exists():
-            store["lgbm"][tag]["cls"] = _load_pickle(cls_pkl)
+            bucket["cls"] = _load_pickle(cls_pkl)
+        if bucket:
+            out["lgbm"][tag] = bucket
 
-    # LSTM (.keras)
-    for tag in ["A", "B", "AFF"]:
-        reg_keras = model_dir / f"nvda_LSTM_{tag}_reg.keras"
-        cls_keras = model_dir / f"nvda_LSTM_{tag}_cls.keras"
-        if reg_keras.exists():
-            store["lstm"][tag]["reg"] = tf.keras.models.load_model(reg_keras)
-        if cls_keras.exists():
-            store["lstm"][tag]["cls"] = tf.keras.models.load_model(cls_keras)
+    # ---- Optional LSTM (.keras) ----
+    for tag in TAGS:
+        reg_k = model_dir / f"nvda_LSTM_{tag}_reg.keras"
+        cls_k = model_dir / f"nvda_LSTM_{tag}_cls.keras"
+        bucket: Dict[str, Any] = {}
+        if reg_k.exists():
+            bucket["reg"] = _load_keras(reg_k)
+        if cls_k.exists():
+            bucket["cls"] = _load_keras(cls_k)
+        if bucket:
+            out["lstm"][tag] = bucket
 
-    # BiLSTM+Attention (.keras) — need custom_objects
-    custom = {"SoftAttention": SoftAttention}
-    for tag in ["A", "B", "AFF"]:
-        reg_bi = model_dir / f"nvda_BiLSTM_Attn_{tag}_reg.keras"
-        cls_bi = model_dir / f"nvda_BiLSTM_Attn_{tag}_cls.keras"
-        if reg_bi.exists():
-            store["bilstm"][tag]["reg"] = tf.keras.models.load_model(reg_bi, custom_objects=custom, compile=False)
-        if cls_bi.exists():
-            store["bilstm"][tag]["cls"] = tf.keras.models.load_model(cls_bi, custom_objects=custom, compile=False)
+    # ---- Optional BiLSTM+Attention (.keras) ----
+    for tag in TAGS:
+        reg_k = model_dir / f"nvda_BiLSTM_Attn_{tag}_reg.keras"
+        cls_k = model_dir / f"nvda_BiLSTM_Attn_{tag}_cls.keras"
+        bucket: Dict[str, Any] = {}
+        if reg_k.exists():
+            bucket["reg"] = _load_keras(reg_k)
+        if cls_k.exists():
+            bucket["cls"] = _load_keras(cls_k)
+        if bucket:
+            out["bilstm"][tag] = bucket
 
-    return store
+    # ---- Optional y scaler ----
+    y_scaler = None
+    for name in ("y_scaler.pkl", "nvda_y_scaler.pkl"):
+        p = model_dir / name
+        if p.exists():
+            y_scaler = _load_pickle(p)
+            break
+    if y_scaler is not None:
+        # put at top level to match how main.py reads it
+        out["y_scaler"] = y_scaler  # type: ignore[assignment]
+
+    return out
