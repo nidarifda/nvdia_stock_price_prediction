@@ -1,0 +1,79 @@
+# -------------------------
+# OS junk
+# -------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+._*
+
+# -------------------------
+# Python / FastAPI
+# -------------------------
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.pytype/
+.pyre/
+.ipynb_checkpoints/
+.cache/
+logs/
+*.log
+instance/
+*.sqlite3
+
+# Local env files (never commit secrets)
+.env
+.env.*
+
+# -------------------------
+# Build / coverage
+# -------------------------
+build/
+dist/
+htmlcov/
+.coverage*
+coverage.xml
+
+# -------------------------
+# Models & data (uncomment if you keep large files outside Git)
+# If you DO want to commit small .pkl models, delete these lines.
+# -------------------------
+# models/
+# checkpoints/
+# data/
+# *.keras
+# *.h5
+# *.onnx
+# *.ckpt
+# *.bin
+# *.pt
+# *.sav
+# *.joblib
+# *.txt
+
+# -------------------------
+# Node / Vite (frontend)
+# -------------------------
+nvda-frontend/node_modules/
+nvda-frontend/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# -------------------------
+# IDEs / Editors
+# -------------------------
+.vscode/
+.idea/
+*.iml
