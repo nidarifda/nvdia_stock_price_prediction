@@ -20,14 +20,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # (Recommended by GitHub) prepares the Pages environment
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
 
       - name: Install deps
         working-directory: nvda-frontend
